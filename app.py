@@ -21,6 +21,7 @@ from src.tokenizer import load_nlp, tokenize_text
 from src.xlsx_processing import (
     DEFAULT_SHEET_NAME,
     DEFAULT_TEXT_COLUMN,
+    build_turn_overview,
     to_long_format,
     tokenize_workbook,
     tokens_to_json_column,
@@ -116,7 +117,6 @@ with tab_upload:
 
     if uploaded_files and st.button("Tokenize uploaded file(s)", type="primary"):
         enriched_frames: dict[str, pd.DataFrame] = {}
-        long_frames: list[pd.DataFrame] = []
         errors: list[str] = []
 
         progress = st.progress(0.0, text="Starting...")
@@ -133,7 +133,6 @@ with tab_upload:
                 if row_limit:
                     df = df.head(int(row_limit))
                 enriched_frames[uf.name] = df
-                long_frames.append(to_long_format(df))
             except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
                 errors.append(f"{uf.name}: {exc}")
         progress.progress(1.0, text="Done")
@@ -142,12 +141,66 @@ with tab_upload:
             st.error("Some files failed to process:\n\n" + "\n".join(f"- {e}" for e in errors))
 
         if enriched_frames:
-            all_long = pd.concat(long_frames, ignore_index=True) if long_frames else pd.DataFrame()
+            combined_turns = pd.concat(enriched_frames.values(), ignore_index=True)
+            n_files = len(enriched_frames)
 
-            st.success(f"Tokenized {len(enriched_frames)} file(s), {len(all_long)} tokens total.")
+            # Which non-token columns to actually show/export. Keeping every original
+            # column (Order, Page, Speaker (As Printed), Constituency, Jawatan,
+            # Kementerian, ...) makes the preview unreadable, so default to just
+            # 'Matched Name' (falls back to the first column if that's not present).
+            available_meta_cols = [
+                c for c in combined_turns.columns if c not in (text_column, "Speech Tokens")
+            ]
+            default_meta = ["Matched Name"] if "Matched Name" in available_meta_cols else (
+                available_meta_cols[:1]
+            )
+            if n_files > 1 and "Source File" in available_meta_cols and "Source File" not in default_meta:
+                default_meta = default_meta + ["Source File"]
 
-            st.markdown("#### Preview (long format, first 200 tokens)")
-            st.dataframe(all_long.head(200), use_container_width=True, hide_index=True)
+            id_columns = st.multiselect(
+                "Metadata columns to show/export alongside each speech",
+                options=available_meta_cols,
+                default=default_meta,
+                help="Everything else from the original workbook (Order, Page, Constituency, "
+                "Jawatan, Kementerian, ...) is left out to keep the table readable.",
+            )
+
+            all_long = pd.concat(
+                [to_long_format(df, id_columns=id_columns) for df in enriched_frames.values()],
+                ignore_index=True,
+            )
+
+            st.success(f"Tokenized {n_files} file(s), {len(all_long)} tokens total.")
+
+            st.markdown("#### Speech turns")
+            st.caption(
+                "One row per speech turn. Pick a row below to see its full text and "
+                "token-by-token breakdown."
+            )
+            overview = build_turn_overview(combined_turns, text_column, id_columns)
+            st.dataframe(
+                overview,
+                use_container_width=True,
+                hide_index=True,
+                height=350,
+                column_config={
+                    text_column: st.column_config.TextColumn(text_column, width="large"),
+                },
+            )
+
+            st.markdown("#### Inspect one speech turn")
+            turn_labels = [
+                f"{i}. " + " | ".join(str(combined_turns.iloc[i][c]) for c in id_columns)
+                if id_columns
+                else f"Row {i}"
+                for i in range(len(combined_turns))
+            ]
+            if turn_labels:
+                selected = st.selectbox("Speech turn", options=range(len(turn_labels)), format_func=lambda i: turn_labels[i])
+                row = combined_turns.iloc[selected]
+                st.text_area("Original text", value=str(row[text_column]), height=180, disabled=True)
+                token_df = pd.DataFrame(row["Speech Tokens"])
+                st.dataframe(token_df, use_container_width=True, hide_index=True)
 
             st.markdown("#### Downloads")
             col1, col2 = st.columns(2)
@@ -173,10 +226,6 @@ with tab_upload:
                     file_name="tokenized_workbooks.zip",
                     mime="application/zip",
                 )
-
-            with st.expander("Per-file previews"):
-                for name, df in enriched_frames.items():
-                    st.markdown(f"**{name}** — {len(df)} rows")
-                    st.dataframe(df.head(20), use_container_width=True, hide_index=True)
+                st.caption("Workbooks keep every original column — only the preview/CSV above is filtered.")
     elif uploaded_files:
         st.info("Files are loaded — click **Tokenize uploaded file(s)** to process them.")
