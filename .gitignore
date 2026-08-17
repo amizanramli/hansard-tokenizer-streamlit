@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+
+# Large/local data — don't commit real Hansard transcripts to a public repo
+sample_data/*.xlsx
+outputs/
+*.parquet
+
+# Editors
+.vscode/
+.idea/

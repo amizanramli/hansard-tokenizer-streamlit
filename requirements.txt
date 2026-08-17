@@ -1,0 +1,8 @@
+# Local wheel — bundled in this repo so Streamlit Cloud / any fresh clone
+# can install it without a private package index.
+./wheels/warisan_nlp-0.1.0-py3-none-any.whl
+
+streamlit>=1.32
+pandas>=2.0
+openpyxl>=3.1
+pyarrow>=14.0
