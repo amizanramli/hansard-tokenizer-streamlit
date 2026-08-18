@@ -115,6 +115,13 @@ with tab_upload:
         step=10,
     )
 
+    # Tokenizing writes its results into session_state instead of a local variable.
+    # Streamlit reruns this whole script top-to-bottom on *every* widget interaction
+    # (including just picking a row in the "inspect one speech turn" dropdown below),
+    # and st.button() only evaluates True on the exact run it was clicked. Keeping the
+    # results local to `if st.button(...):` meant selecting a speech turn triggered a
+    # rerun where the button was no longer "clicked" - so the whole results section,
+    # selection included, disappeared. Session state survives reruns, so it doesn't.
     if uploaded_files and st.button("Tokenize uploaded file(s)", type="primary"):
         enriched_frames: dict[str, pd.DataFrame] = {}
         errors: list[str] = []
@@ -136,6 +143,26 @@ with tab_upload:
             except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
                 errors.append(f"{uf.name}: {exc}")
         progress.progress(1.0, text="Done")
+
+        st.session_state["tokenize_result"] = {
+            "enriched_frames": enriched_frames,
+            "errors": errors,
+            "text_column": text_column,
+            "sheet_name": sheet_name,
+        }
+
+    result = st.session_state.get("tokenize_result")
+
+    if result is None and uploaded_files:
+        st.info("Files are loaded — click **Tokenize uploaded file(s)** to process them.")
+
+    if result is not None:
+        enriched_frames = result["enriched_frames"]
+        errors = result["errors"]
+        # Use the column names the results were actually tokenized with, not whatever
+        # is currently in the sidebar text inputs (those may have changed since).
+        text_column = result["text_column"]
+        sheet_name = result["sheet_name"]
 
         if errors:
             st.error("Some files failed to process:\n\n" + "\n".join(f"- {e}" for e in errors))
@@ -163,6 +190,7 @@ with tab_upload:
                 default=default_meta,
                 help="Everything else from the original workbook (Order, Page, Constituency, "
                 "Jawatan, Kementerian, ...) is left out to keep the table readable.",
+                key="id_columns",
             )
 
             all_long = pd.concat(
@@ -196,7 +224,12 @@ with tab_upload:
                 for i in range(len(combined_turns))
             ]
             if turn_labels:
-                selected = st.selectbox("Speech turn", options=range(len(turn_labels)), format_func=lambda i: turn_labels[i])
+                selected = st.selectbox(
+                    "Speech turn",
+                    options=range(len(turn_labels)),
+                    format_func=lambda i: turn_labels[i],
+                    key="selected_turn",
+                )
                 row = combined_turns.iloc[selected]
                 st.text_area("Original text", value=str(row[text_column]), height=180, disabled=True)
                 token_df = pd.DataFrame(row["Speech Tokens"])
@@ -227,5 +260,3 @@ with tab_upload:
                     mime="application/zip",
                 )
                 st.caption("Workbooks keep every original column — only the preview/CSV above is filtered.")
-    elif uploaded_files:
-        st.info("Files are loaded — click **Tokenize uploaded file(s)** to process them.")
