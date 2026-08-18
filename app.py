@@ -28,8 +28,8 @@ from src.xlsx_processing import (
 )
 
 st.set_page_config(
-    page_title="Warisan NLP — Hansard Tokenizer",
-    page_icon="🧬",
+    page_title="Hansard Tokenizer",
+    page_icon="💿",
     layout="wide",
 )
 
@@ -46,7 +46,7 @@ def df_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str) -> bytes:
     return buf.getvalue()
 
 
-st.title("🧬 Warisan NLP — Hansard Tokenizer")
+st.title("Hansard Tokenizer")
 st.caption(
     "A Streamlit interface for the `warisan_nlp` toolkit "
     "(rule-based Bahasa Melayu tokenizer, lemmatizer, and root annotator)."
@@ -78,7 +78,7 @@ tab_demo, tab_upload = st.tabs(["✍️ Quick text demo", "📄 Upload & tokeniz
 
 with tab_demo:
     st.subheader("Tokenize free text")
-    default_text = "Dia membaca buku-buku di rumahku."
+    default_text = "Apa yang berlaku tadi ialah penjelasan fakta. Ya, betul. Sekarang ini saya hendak buka kepada perbahasan."
     text_input = st.text_area("Bahasa Melayu text", value=default_text, height=120)
 
     if st.button("Tokenize", type="primary", key="tokenize_demo"):
